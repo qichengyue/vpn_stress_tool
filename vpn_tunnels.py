@@ -1,6 +1,6 @@
 import asyncio, aiohttp
 from config import VIRTUAL_SITE_IP, BACKEND_IP, VIRTUAL_USERS, PAYLOAD_PACKET_SIZE,\
-    PAYLOAD_TYPE, PAYLOAD_SRC_PORT, PAYLOAD_DST_PORT
+    PAYLOAD_TYPE, PAYLOAD_SRC_PORT, PAYLOAD_DST_PORT, LOGGING_LEVEL
 import ssl
 import struct
 from utils import generate_icmp_pkt, generate_udp_pkt
@@ -9,11 +9,11 @@ import time
 import requests, urllib3
 import logging
 import uuid
+import psutil
+from multiprocessing import Pool, Manager
 
-logging.basicConfig(level=logging.INFO, filename='vpn.log', filemode='w')
+logging.basicConfig(level=LOGGING_LEVEL, filename='vpn.log', filemode='w')
 
-timeout_err_count = 0
-complete_tunnels = 0
 
 urllib3.disable_warnings()
 login_url = 'https://%s/prx/000/http/localhost/login' % VIRTUAL_SITE_IP
@@ -26,7 +26,7 @@ d['pwd1'] = ''
 d['pwd2'] = ''
 
 
-async def vpn_session(virtual_hostname):
+async def vpn_session(virtual_hostname, statistics):
     # Post login part
     jar = aiohttp.CookieJar(unsafe=True)    # To accept cookie with IP address(By default only cookie with FQDN are legal)
     async with aiohttp.ClientSession(cookie_jar=jar) as session:
@@ -97,29 +97,55 @@ async def vpn_session(virtual_hostname):
     
     await asyncio.sleep(1)
     
-    for i in range(10000):
+    for i in range(3000):
         writer.write(bytes(pkt))
         try:
-            logging.info('virtual ip %s is about to send and receive data' %str_clientip)
             await asyncio.wait_for(writer.drain(), timeout=5)
             await asyncio.wait_for(reader.read(PAYLOAD_PACKET_SIZE - 28), timeout=5) # ip hdr + icmp hdr or udp hdr = 28
         except asyncio.TimeoutError:
             logging.warning('timeout error catched, virtual ip: %s' %str_clientip)
-            global timeout_err_count
-            timeout_err_count += 1
+            statistics['timeout_err_count'] += 1
     
-    global complete_tunnels
-    complete_tunnels += 1
+    statistics['complete_tunnels'] += 1
+    
     # logout session
     time.sleep(3)
     requests.get(logout_url, verify=False, headers={'Cookie': cookie})
 
+def run_proc(proc_name, vuser_number, statistics):
+    loop = asyncio.get_event_loop()
+    tasks = [vpn_session('proc-%s: vuser-%s' %(proc_name, i), statistics) for i in range(vuser_number)]
+    loop.run_until_complete(asyncio.wait(tasks))
 
-loop = asyncio.get_event_loop()
-tasks = [vpn_session('vuser%s' %i) for i in range(VIRTUAL_USERS)]
-loop.run_until_complete(asyncio.wait(tasks))
+if __name__=='__main__':
+    # Get processors number
+    n = psutil.cpu_count(logical=True)
+    
+    processes = list()
+    
+    # Shared data between processes, for statistics using
+    manager = Manager()
+    statistics = manager.dict()
+    statistics['complete_tunnels'] = 0
+    statistics['timeout_err_count'] = 0
+    
+    pool = Pool(n)
+    for i in range(n):
+        # dispatch VIRTUAL_USERS to the processes, will start n processes(n = cpu count)
+        if i==0:
+            vusers = VIRTUAL_USERS // n + VIRTUAL_USERS % n     # to make proc0 + proc1 + .. + proc(n-1) = VIRTUAL_USERS
+            pool.apply_async(run_proc, args=(i, vusers, statistics) )
+        else:
+            vusers = VIRTUAL_USERS // n
+            pool.apply_async(run_proc, args=(i, vusers, statistics) )
 
-print('=================Statistics===================')
-print('Timeout errors   : %s' %timeout_err_count)
-print('Complete tunnels : %s of %s' %(complete_tunnels, VIRTUAL_USERS))
-print('==============================================')
+    
+    print('Waiting for all subprocesses done...')
+    pool.close()
+    pool.join()
+    print('All subprocess done.')
+    
+    print('=================Statistics===================')
+    print('Timeout errors   : %s' %statistics['timeout_err_count'])
+    print('Complete tunnels : %s of %s' %(statistics['complete_tunnels'], VIRTUAL_USERS))
+    print('==============================================')
