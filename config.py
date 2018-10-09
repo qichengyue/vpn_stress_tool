@@ -2,10 +2,10 @@
 VIRTUAL_SITE_IP = '172.22.134.8'
 
 # IP address of backend server
-BACKEND_IP = '172.18.0.102'
+BACKEND_IP = '172.18.0.100'
 
 # Concurrent virtual user count
-VIRTUAL_USERS = 100
+VIRTUAL_USERS = 10
 
 # Desired load per tunnel (KB/s)
 TRAFFIC_LOAD_PER_TUNNEL = 100
@@ -20,7 +20,7 @@ TUNNEL_TYPE = 'TCP'
 IS_UDP_TUNNEL_ENCRYPT = 0
 
 # payload type, 'ICMP' or 'UDP'
-PAYLOAD_TYPE = 'ICMP'
+PAYLOAD_TYPE = 'UDP'
 
 # payload src port
 PAYLOAD_SRC_PORT = 8888

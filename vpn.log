@@ -1,0 +1,86 @@
+ERROR:asyncio:Task exception was never retrieved
+future: <Task finished coro=<vpn_session() done, defined at C:\Users\qichengyue\eclipse-workspace\l3vpn_stress\vpn_tunnels.py:29> exception=ConnectionAbortedError(10053, '你的主机中的软件中止了一个已建立的连接。', None, 10053, None)>
+Traceback (most recent call last):
+  File "C:\Users\qichengyue\eclipse-workspace\l3vpn_stress\vpn_tunnels.py", line 104, in vpn_session
+    await asyncio.wait_for(writer.drain(), timeout=5)
+  File "C:\Users\qichengyue\AppData\Local\Programs\Python\Python37\lib\asyncio\tasks.py", line 412, in wait_for
+    return fut.result()
+  File "C:\Users\qichengyue\AppData\Local\Programs\Python\Python37\lib\asyncio\streams.py", line 339, in drain
+    raise exc
+  File "C:\Users\qichengyue\AppData\Local\Programs\Python\Python37\lib\asyncio\selector_events.py", line 891, in _write_ready
+    n = self._sock.send(self._buffer)
+ConnectionAbortedError: [WinError 10053] 你的主机中的软件中止了一个已建立的连接。
+ERROR:asyncio:Task exception was never retrieved
+future: <Task finished coro=<vpn_session() done, defined at C:\Users\qichengyue\eclipse-workspace\l3vpn_stress\vpn_tunnels.py:29> exception=ConnectionAbortedError(10053, '你的主机中的软件中止了一个已建立的连接。', None, 10053, None)>
+Traceback (most recent call last):
+  File "C:\Users\qichengyue\eclipse-workspace\l3vpn_stress\vpn_tunnels.py", line 104, in vpn_session
+    await asyncio.wait_for(writer.drain(), timeout=5)
+  File "C:\Users\qichengyue\AppData\Local\Programs\Python\Python37\lib\asyncio\tasks.py", line 412, in wait_for
+    return fut.result()
+  File "C:\Users\qichengyue\AppData\Local\Programs\Python\Python37\lib\asyncio\streams.py", line 339, in drain
+    raise exc
+  File "C:\Users\qichengyue\AppData\Local\Programs\Python\Python37\lib\asyncio\selector_events.py", line 891, in _write_ready
+    n = self._sock.send(self._buffer)
+ConnectionAbortedError: [WinError 10053] 你的主机中的软件中止了一个已建立的连接。
+ERROR:asyncio:Task exception was never retrieved
+future: <Task finished coro=<vpn_session() done, defined at C:\Users\qichengyue\eclipse-workspace\l3vpn_stress\vpn_tunnels.py:29> exception=ConnectionAbortedError(10053, '你的主机中的软件中止了一个已建立的连接。', None, 10053, None)>
+Traceback (most recent call last):
+  File "C:\Users\qichengyue\eclipse-workspace\l3vpn_stress\vpn_tunnels.py", line 104, in vpn_session
+    await asyncio.wait_for(writer.drain(), timeout=5)
+  File "C:\Users\qichengyue\AppData\Local\Programs\Python\Python37\lib\asyncio\tasks.py", line 412, in wait_for
+    return fut.result()
+  File "C:\Users\qichengyue\AppData\Local\Programs\Python\Python37\lib\asyncio\streams.py", line 339, in drain
+    raise exc
+  File "C:\Users\qichengyue\AppData\Local\Programs\Python\Python37\lib\asyncio\selector_events.py", line 891, in _write_ready
+    n = self._sock.send(self._buffer)
+ConnectionAbortedError: [WinError 10053] 你的主机中的软件中止了一个已建立的连接。
+ERROR:asyncio:Task exception was never retrieved
+future: <Task finished coro=<vpn_session() done, defined at C:\Users\qichengyue\eclipse-workspace\l3vpn_stress\vpn_tunnels.py:29> exception=ConnectionAbortedError(10053, '你的主机中的软件中止了一个已建立的连接。', None, 10053, None)>
+Traceback (most recent call last):
+  File "C:\Users\qichengyue\eclipse-workspace\l3vpn_stress\vpn_tunnels.py", line 104, in vpn_session
+    await asyncio.wait_for(writer.drain(), timeout=5)
+  File "C:\Users\qichengyue\AppData\Local\Programs\Python\Python37\lib\asyncio\tasks.py", line 412, in wait_for
+    return fut.result()
+  File "C:\Users\qichengyue\AppData\Local\Programs\Python\Python37\lib\asyncio\streams.py", line 339, in drain
+    raise exc
+  File "C:\Users\qichengyue\AppData\Local\Programs\Python\Python37\lib\asyncio\selector_events.py", line 891, in _write_ready
+    n = self._sock.send(self._buffer)
+ConnectionAbortedError: [WinError 10053] 你的主机中的软件中止了一个已建立的连接。
+ERROR:asyncio:Task exception was never retrieved
+future: <Task finished coro=<vpn_session() done, defined at C:\Users\qichengyue\eclipse-workspace\l3vpn_stress\vpn_tunnels.py:29> exception=ConnectionAbortedError(10053, '你的主机中的软件中止了一个已建立的连接。', None, 10053, None)>
+Traceback (most recent call last):
+  File "C:\Users\qichengyue\eclipse-workspace\l3vpn_stress\vpn_tunnels.py", line 104, in vpn_session
+    await asyncio.wait_for(writer.drain(), timeout=5)
+  File "C:\Users\qichengyue\AppData\Local\Programs\Python\Python37\lib\asyncio\tasks.py", line 412, in wait_for
+    return fut.result()
+  File "C:\Users\qichengyue\AppData\Local\Programs\Python\Python37\lib\asyncio\streams.py", line 339, in drain
+    raise exc
+  File "C:\Users\qichengyue\AppData\Local\Programs\Python\Python37\lib\asyncio\selector_events.py", line 891, in _write_ready
+    n = self._sock.send(self._buffer)
+ConnectionAbortedError: [WinError 10053] 你的主机中的软件中止了一个已建立的连接。
+ERROR:asyncio:Task exception was never retrieved
+future: <Task finished coro=<vpn_session() done, defined at C:\Users\qichengyue\eclipse-workspace\l3vpn_stress\vpn_tunnels.py:29> exception=ConnectionAbortedError(10053, '你的主机中的软件中止了一个已建立的连接。', None, 10053, None)>
+Traceback (most recent call last):
+  File "C:\Users\qichengyue\eclipse-workspace\l3vpn_stress\vpn_tunnels.py", line 104, in vpn_session
+    await asyncio.wait_for(writer.drain(), timeout=5)
+  File "C:\Users\qichengyue\AppData\Local\Programs\Python\Python37\lib\asyncio\tasks.py", line 412, in wait_for
+    return fut.result()
+  File "C:\Users\qichengyue\AppData\Local\Programs\Python\Python37\lib\asyncio\streams.py", line 339, in drain
+    raise exc
+  File "C:\Users\qichengyue\AppData\Local\Programs\Python\Python37\lib\asyncio\selector_events.py", line 891, in _write_ready
+    n = self._sock.send(self._buffer)
+ConnectionAbortedError: [WinError 10053] 你的主机中的软件中止了一个已建立的连接。
+ERROR:asyncio:Task exception was never retrieved
+future: <Task finished coro=<vpn_session() done, defined at C:\Users\qichengyue\eclipse-workspace\l3vpn_stress\vpn_tunnels.py:29> exception=ConnectionAbortedError(10053, '你的主机中的软件中止了一个已建立的连接。', None, 10053, None)>
+Traceback (most recent call last):
+  File "C:\Users\qichengyue\eclipse-workspace\l3vpn_stress\vpn_tunnels.py", line 104, in vpn_session
+    await asyncio.wait_for(writer.drain(), timeout=5)
+  File "C:\Users\qichengyue\AppData\Local\Programs\Python\Python37\lib\asyncio\tasks.py", line 412, in wait_for
+    return fut.result()
+  File "C:\Users\qichengyue\AppData\Local\Programs\Python\Python37\lib\asyncio\streams.py", line 348, in drain
+    await self._protocol._drain_helper()
+  File "C:\Users\qichengyue\AppData\Local\Programs\Python\Python37\lib\asyncio\streams.py", line 209, in _drain_helper
+    await waiter
+  File "C:\Users\qichengyue\AppData\Local\Programs\Python\Python37\lib\asyncio\selector_events.py", line 891, in _write_ready
+    n = self._sock.send(self._buffer)
+ConnectionAbortedError: [WinError 10053] 你的主机中的软件中止了一个已建立的连接。
