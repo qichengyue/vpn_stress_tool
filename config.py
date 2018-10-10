@@ -7,13 +7,13 @@ VIRTUAL_SITE_IP = '172.22.134.8'
 BACKEND_IP = '172.18.0.100'
 
 # Concurrent virtual user count
-VIRTUAL_USERS = 200
+VIRTUAL_USERS = 50
 
 # Desired load per tunnel (KB/s)
-TRAFFIC_LOAD_PER_TUNNEL = 100
+TRAFFIC_LOAD_PER_TUNNEL = 200
 
 # how long should the test run(with seconds)
-DURATION = 120
+DURATION = 60
 
 # tunnel type UDP or TCP
 TUNNEL_TYPE = 'TCP'
@@ -33,5 +33,5 @@ PAYLOAD_DST_PORT = 9999
 # payload packet size(Bytes)
 PAYLOAD_PACKET_SIZE = 1200
 
-# LOG LEVEL(debug < info < warning < error < critical)
+# LOG LEVEL, by default "logging.ERROR" (debug < info < warning < error < critical)
 LOGGING_LEVEL = logging.ERROR

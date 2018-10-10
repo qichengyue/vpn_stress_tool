@@ -1,6 +1,7 @@
 import asyncio, aiohttp
 from config import VIRTUAL_SITE_IP, BACKEND_IP, VIRTUAL_USERS, PAYLOAD_PACKET_SIZE,\
-    PAYLOAD_TYPE, PAYLOAD_SRC_PORT, PAYLOAD_DST_PORT, LOGGING_LEVEL
+    PAYLOAD_TYPE, PAYLOAD_SRC_PORT, PAYLOAD_DST_PORT, LOGGING_LEVEL,\
+    TRAFFIC_LOAD_PER_TUNNEL, DURATION
 import ssl
 import struct
 from utils import generate_icmp_pkt, generate_udp_pkt
@@ -97,18 +98,40 @@ async def vpn_session(virtual_hostname, statistics):
     
     await asyncio.sleep(1)
     
-    for i in range(3000):
+    # now caculate total packets and interval
+    total_packets = TRAFFIC_LOAD_PER_TUNNEL * DURATION * 1024 // PAYLOAD_PACKET_SIZE
+    interval_packets = 20   # for performance reasons, one sleep for sevaral packets
+    interval = round(PAYLOAD_PACKET_SIZE / (TRAFFIC_LOAD_PER_TUNNEL * 1024) * interval_packets * 0.9, 4)    # this 0.9 is an experimental value to make traffic load accurate
+    
+    # start traffic load
+    start_time = time.time()
+    for i in range(total_packets):
         writer.write(bytes(pkt))
         try:
-            await asyncio.wait_for(writer.drain(), timeout=5)
-            await asyncio.wait_for(reader.read(PAYLOAD_PACKET_SIZE - 28), timeout=5) # ip hdr + icmp hdr or udp hdr = 28
+            if not i % interval_packets:
+                await asyncio.sleep(interval)
+                
+                # By the way, to caculate packet delay(ms)
+                delay_start_time = time.time()
+                await asyncio.wait_for(writer.drain(), timeout=5)
+                await asyncio.wait_for(reader.read(PAYLOAD_PACKET_SIZE - 28), timeout=5) # ip hdr + icmp hdr or udp hdr = 28
+                delay_end_time = time.time()
+                statistics['delay_packets_number'] += 1
+                statistics['delay'] += delay_end_time - delay_start_time    
+            else:
+                await asyncio.wait_for(writer.drain(), timeout=5)
+                await asyncio.wait_for(reader.read(PAYLOAD_PACKET_SIZE - 28), timeout=5) # ip hdr + icmp hdr or udp hdr = 28
         except asyncio.TimeoutError:
             logging.warning('timeout error catched, virtual ip: %s' %str_clientip)
             statistics['timeout_err_count'] += 1
     
+    end_time = time.time()
+    throughput= total_packets * PAYLOAD_PACKET_SIZE / (end_time - start_time) / 1024    # KB/s 
+    
+    statistics['troughtput'] += throughput
     statistics['complete_tunnels'] += 1
     
-    # logout session
+    # logout
     time.sleep(3)
     requests.get(logout_url, verify=False, headers={'Cookie': cookie})
 
@@ -120,14 +143,16 @@ def run_proc(proc_name, vuser_number, statistics):
 if __name__=='__main__':
     # Get processors number
     n = psutil.cpu_count(logical=True)
-    
-    processes = list()
+    print('Logical CPU count(s): %s' %n)
     
     # Shared data between processes, for statistics using
     manager = Manager()
     statistics = manager.dict()
     statistics['complete_tunnels'] = 0
     statistics['timeout_err_count'] = 0
+    statistics['delay'] = 0
+    statistics['delay_packets_number'] = 0
+    statistics['troughtput'] = 0
     
     pool = Pool(n)
     for i in range(n):
@@ -139,7 +164,7 @@ if __name__=='__main__':
             vusers = VIRTUAL_USERS // n
             pool.apply_async(run_proc, args=(i, vusers, statistics) )
 
-    
+    print('All processes start successfully, total virtual users: %s' %VIRTUAL_USERS)
     print('Waiting for all subprocesses done...')
     pool.close()
     pool.join()
@@ -148,4 +173,6 @@ if __name__=='__main__':
     print('=================Statistics===================')
     print('Timeout errors   : %s' %statistics['timeout_err_count'])
     print('Complete tunnels : %s of %s' %(statistics['complete_tunnels'], VIRTUAL_USERS))
+    print('Througtput       : %s KB/s' %round(statistics['troughtput']/statistics['complete_tunnels'], 2))
+    print('Delay            : %s ms' %round(statistics['delay']/statistics['delay_packets_number'] * 1000, 2))
     print('==============================================')
