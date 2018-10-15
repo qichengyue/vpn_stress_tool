@@ -4,6 +4,9 @@ Created on 2018-08-23 15:34
 @author: qichengyue
 '''
 import struct
+import time
+import asyncio
+from config import PAYLOAD_PACKET_SIZE
 
 # total_length: a integer, src_ip and dst_ip shoud be bytes like: b'\xac\x12dd'(172.18.100.100)
 
@@ -161,3 +164,99 @@ def checksum_calculator(data):
     
     checksum = 0xffff - checksum
     return checksum
+
+# For create UDP tunnel
+def get_apt_control_packet_header(): 
+    atp_control_packet_header = [
+        0x45, 0x00, 0x00, 0x14, 
+        0x00, 0x00, 0x00, 0x00, 
+        0x00, 0xff, 0x00, 0x00,
+    ]
+    return atp_control_packet_header
+
+
+class VpnUdpTunnelProtocol:
+    def __init__(self, logging, loop, udp_tunnel_data):
+        self.logging = logging
+        self.loop = loop
+        self.udp_tunnel_data = udp_tunnel_data
+        self.transport = None
+        self.is_tunnel_created = False
+        self.on_con_lost = loop.create_future()
+        self.is_active = True
+
+    def connection_made(self, transport):
+        self.transport = transport
+        self.logging.info('UDP connection build successfully')
+        self.transport.sendto(bytes(self.udp_tunnel_data['first_udp_packet']))
+        
+    def datagram_received(self, data, addr):
+        self.logging.info('UDP tunnel received data: %s bytes' %len(data))
+        pkt = self.udp_tunnel_data['pay_load_packet']
+        
+        # For udp tunnel UDP payload part need add a special header
+        udp_payload_packet_header = [x for x in range(4)]   # Init a list, length is 4 bytes
+        udp_payload_packet_header[0] = self.udp_tunnel_data['coreid']
+        udp_payload_packet_header[1] = (len(pkt) + 12) // 8
+        udp_payload_packet_header[2] = pkt[0] ^ pkt[3]
+        udp_payload_packet_header[3] = udp_payload_packet_header[1] ^ udp_payload_packet_header[2]
+        udp_payload_packet_header.extend(pkt)
+        pkt = udp_payload_packet_header
+
+        
+        if not self.is_tunnel_created:
+            if data == b'200 OK':
+                self.logging.info('UDP tunnel create success')
+                self.is_tunnel_created = True
+                self.transport.sendto(bytes(pkt))
+            else:
+                self.logging.warning('UDP tunnel create failed, close socket')
+                self.transport.close()
+        else:
+            # Start traffic load
+            self.logging.info('start traffic load of udp tunnel')
+            total_packets = self.udp_tunnel_data['total_packets']
+            interval_packets = self.udp_tunnel_data['interval_packets']
+            interval = self.udp_tunnel_data['interval']
+            
+            start_time = time.time()
+            delay_packets_number = 0
+            delay_time_total = 0.0
+            for i in range(total_packets):
+                try:
+                    if not i % interval_packets:
+                        # Each interval, we send a payload ping to caculate packet delay(ms)
+                        delay_start_time = time.time()
+                        self.loop.run_until_complete(asyncio.ensure_future(self.sleep_and_send(interval, pkt)) )
+                        delay_end_time = time.time()
+                        delay_packets_number += 1
+                        delay_time_total += delay_end_time - delay_start_time    
+                    elif self.is_active:
+                            self.transport.sendto(bytes(pkt))
+                except asyncio.TimeoutError:
+                    self.logging.warning('timeout error catched, virtual ip: %s')
+                    self.udp_tunnel_data['statistics']['timeout_err_count'] += 1
+            
+            self.logging.info('VPN Tunnel traffic load complete, close socket.')
+            self.transport.close()
+            end_time = time.time()
+            throughput= total_packets * PAYLOAD_PACKET_SIZE / (end_time - start_time) / 1024    # KB/s 
+            
+            self.udp_tunnel_data['statistics']['delay_packets_number'] = delay_packets_number
+            self.udp_tunnel_data['statistics']['delay'] = delay_time_total
+            self.udp_tunnel_data['statistics']['troughtput'] += throughput
+            self.udp_tunnel_data['statistics']['complete_tunnels'] += 1
+    
+    # this function is for sending data with a sleep time(To control trafficload)
+    async def sleep_and_send(self, interval, pkt):
+        self.is_active = False
+        await asyncio.sleep(interval)
+        self.is_active = True
+        self.transport.sendto(bytes(pkt))
+    
+    def error_received(self, exc):
+        self.logging.error('UDP tunnel connection got an error, reason:%s' %exc)
+
+    def connection_lost(self, exc):
+        self.logging.error('UDP tunnel connection lost, reason: %s' %exc)
+        self.on_con_lost.set_result(True)
