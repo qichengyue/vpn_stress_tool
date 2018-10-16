@@ -1,19 +1,28 @@
+import threading
 import asyncio
-
-async def func1_wait():
-    print('start..')
-    await asyncio.sleep(3)
-    print('complete..')
+import time
 
 
-async def func2():
-    print('func2 start..')
-    loop = asyncio.get_event_loop()
-    loop.run_until_complete(asyncio.ensure_future(func1_wait()))
-    print('func2 finished..')
 
-if __name__ == '__main__':
-    
-    loop = asyncio.get_event_loop()
-    tasks = [func2(), func2()]
-    loop.run_until_complete(asyncio.wait(tasks))
+def t():
+    print('Threading %s start..' %'A')
+    for i in range(20):
+        time.sleep(0.3)
+        
+        print('Thread %s is running..' %'A')
+        
+async def f1(name):
+    if name == 'A':
+        print('A thread will be start..')
+        tt = threading.Thread(target=t, name='A-thread')
+        tt.start()
+        tt.join()
+    while True:
+        print('%s is running..' %name)
+        time.sleep(2)
+        print('%s is abount to pending..' %name)
+        await asyncio.sleep(2)
+
+tasks = [f1('A'), f1('B')]
+loop = asyncio.get_event_loop()
+loop.run_until_complete(asyncio.wait(tasks))

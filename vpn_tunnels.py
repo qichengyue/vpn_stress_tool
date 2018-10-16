@@ -58,7 +58,7 @@ async def vpn_session(virtual_hostname, statistics):
 
             cookie = cookie.encode('utf-8')
 
-    await asyncio.sleep(3)
+    await asyncio.sleep(5)
     
     # create vpn tunnel
     ssl_ctx = ssl._create_unverified_context()
@@ -140,26 +140,47 @@ async def vpn_session(virtual_hostname, statistics):
         udp_tunnel_packet[1] = (len(udp_tunnel_packet) - 4 + 12) // 8
         udp_tunnel_packet[2] = udp_tunnel_packet[4] ^ udp_tunnel_packet[5]
         udp_tunnel_packet[3] = udp_tunnel_packet[1] ^ udp_tunnel_packet[2]
+        
         # create asyncio UDP socket
-        udp_tunnel_data = dict()    # All the data needed by udp tunnel will in this dict
-        udp_tunnel_data['coreid']= coreid
-        udp_tunnel_data['first_udp_packet'] = udp_tunnel_packet
-        udp_tunnel_data['pay_load_packet'] = pkt
-        udp_tunnel_data['statistics'] = statistics
-        udp_tunnel_data['total_packets'] = total_packets
-        udp_tunnel_data['interval_packets'] = interval_packets
-        udp_tunnel_data['interval'] = interval
-        
         loop = asyncio.get_running_loop()
-        transport, protocol = await loop.create_datagram_endpoint(lambda: VpnUdpTunnelProtocol(logger, loop, udp_tunnel_data),
+        # Create corutine socket and send first packet
+        transport, protocol = await loop.create_datagram_endpoint(lambda: VpnUdpTunnelProtocol(logger, loop, udp_tunnel_packet),
             remote_addr=(VIRTUAL_SITE_IP, udp_tunnel_port))
+        await asyncio.sleep(2)  # Sleep 2s and then start traffic load
         
-        try:
-            await protocol.on_con_lost
-        except BaseException as e:
-            print('UDP tunnel closed unexpectly, stacktrace: %s' %e)
-        finally:
-            transport.close()
+        # For udp tunnel UDP payload part need add a special header
+        udp_payload_packet_header = [x for x in range(4)]   # Init a list, length is 4 bytes
+        udp_payload_packet_header[0] = coreid
+        udp_payload_packet_header[1] = (len(pkt) + 12) // 8
+        udp_payload_packet_header[2] = pkt[0] ^ pkt[3]
+        udp_payload_packet_header[3] = udp_payload_packet_header[1] ^ udp_payload_packet_header[2]
+        udp_payload_packet_header.extend(pkt)
+        pkt = udp_payload_packet_header
+        
+        start_time = time.time()
+        delay_packets_number = 0
+        delay_time_total = 0.0
+        for i in range(total_packets):
+            
+            if not i % interval_packets:
+                transport.sendto(bytes(pkt))
+                # By the way, to caculate packet delay(ms)
+                delay_start_time = time.time()
+                # await asyncio.sleep(0.001)  # Todo: resolve UDP tunnel delay caculate
+                delay_end_time = time.time()
+                delay_packets_number += 1
+                delay_time_total += delay_end_time - delay_start_time
+                await asyncio.sleep(interval)
+            else:
+                transport.sendto(bytes(pkt))
+            
+        end_time = time.time()
+        throughput= total_packets * PAYLOAD_PACKET_SIZE / (end_time - start_time) / 1024    # KB/s 
+        
+        statistics['delay_packets_number'] = delay_packets_number
+        statistics['delay'] = delay_time_total
+        statistics['troughtput'] += throughput
+        statistics['complete_tunnels'] += 1
     
     # start traffic load
     if  TUNNEL_TYPE == 'TCP':
@@ -173,14 +194,14 @@ async def vpn_session(virtual_hostname, statistics):
                     await asyncio.sleep(interval)
                     # By the way, to caculate packet delay(ms)
                     delay_start_time = time.time()
-                    await asyncio.wait_for(writer.drain(), timeout=5)
-                    await asyncio.wait_for(reader.read(PAYLOAD_PACKET_SIZE - 28), timeout=5) # ip hdr + icmp hdr or udp hdr = 28
+                    await asyncio.wait_for(writer.drain(), timeout=3)
+                    await asyncio.wait_for(reader.read(PAYLOAD_PACKET_SIZE - 28), timeout=3) # ip hdr + icmp hdr or udp hdr = 28
                     delay_end_time = time.time()
                     delay_packets_number += 1
                     delay_time_total += delay_end_time - delay_start_time    
                 else:
-                    await asyncio.wait_for(writer.drain(), timeout=5)
-                    await asyncio.wait_for(reader.read(PAYLOAD_PACKET_SIZE - 28), timeout=5) # ip hdr + icmp hdr or udp hdr = 28
+                    await asyncio.wait_for(writer.drain(), timeout=3)
+                    await asyncio.wait_for(reader.read(PAYLOAD_PACKET_SIZE - 28), timeout=3) # ip hdr + icmp hdr or udp hdr = 28
             except asyncio.TimeoutError:
                 logging.warning('timeout error catched, virtual ip: %s' %str_clientip)
                 statistics['timeout_err_count'] += 1
@@ -194,8 +215,12 @@ async def vpn_session(virtual_hostname, statistics):
         statistics['complete_tunnels'] += 1
     
     # logout session
-    time.sleep(3)
-    requests.get(logout_url, verify=False, headers={'Cookie': cookie})
+    await asyncio.sleep(3)
+    reader, writer = await asyncio.open_connection(VIRTUAL_SITE_IP, 443, ssl=ssl_ctx)
+    writer.write(b'Get /prx/000/http/localhost/logout HTTP/1.1\r\nHost: %s\r\nCookie: %s\r\n\r\n'
+                 % (VIRTUAL_SITE_IP.encode(encoding='utf-8'), cookie) )
+    await writer.drain()
+    await reader.read(1024)
 
 def run_proc(proc_name, vuser_number, statistics):
     loop = asyncio.get_event_loop()
@@ -205,7 +230,7 @@ def run_proc(proc_name, vuser_number, statistics):
 if __name__=='__main__':
     # Get processors number
     n = psutil.cpu_count(logical=True)
-    print('Logical CPU count(s): %s' %n)
+    print('Logical CPU count: %s' %n)
     
     # Shared data between processes, for statistics using
     manager = Manager()
@@ -221,10 +246,12 @@ if __name__=='__main__':
         # dispatch VIRTUAL_USERS to the processes, will start n processes(n = cpu count)
         if i==0:
             vusers = VIRTUAL_USERS // n + VIRTUAL_USERS % n     # to make proc0 + proc1 + .. + proc(n-1) = VIRTUAL_USERS
-            pool.apply_async(run_proc, args=(i, vusers, statistics) )
+            if vusers > 0:
+                pool.apply_async(run_proc, args=(i, vusers, statistics) )
         else:
             vusers = VIRTUAL_USERS // n
-            pool.apply_async(run_proc, args=(i, vusers, statistics) )
+            if vusers > 0:
+                pool.apply_async(run_proc, args=(i, vusers, statistics) )
 
     print('All processes start successfully, total virtual users: %s' %VIRTUAL_USERS)
     print('Waiting for all subprocesses done...')
