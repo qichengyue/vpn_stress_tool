@@ -5,7 +5,7 @@ from config import VIRTUAL_SITE_IP, BACKEND_IP, VIRTUAL_USERS, PAYLOAD_PACKET_SI
 import ssl
 import struct
 from utils import generate_icmp_pkt, generate_udp_pkt,\
-    get_apt_control_packet_header, VpnUdpTunnelProtocol
+    get_apt_control_packet_header, VpnUdpTunnelProtocol, udp_tunnel_socket
 import socket
 import time
 import requests, urllib3
@@ -15,6 +15,7 @@ import psutil
 from multiprocessing import Pool, Manager
 from asyncio.transports import Transport
 from builtins import BaseException
+import threading
 
 logging.basicConfig(level=LOGGING_LEVEL, filename='vpn.log', filemode='w')
 logger = logging.getLogger(__name__)
@@ -102,10 +103,10 @@ async def vpn_session(virtual_hostname, statistics):
     
     await asyncio.sleep(1)
     
-    # now caculate total packets and interval
+    # now calculate total packets and interval_time
     total_packets = TRAFFIC_LOAD_PER_TUNNEL * DURATION * 1024 // PAYLOAD_PACKET_SIZE
-    interval_packets = 20   # for performance reasons, one sleep for sevaral packets
-    interval = round(PAYLOAD_PACKET_SIZE / (TRAFFIC_LOAD_PER_TUNNEL * 1024) * interval_packets * 0.9, 4)    # this 0.9 is an experimental value to make traffic load accurate
+    interval_count = 20   # for performance reasons, one sleep for several packets
+    interval_time = round(PAYLOAD_PACKET_SIZE / (TRAFFIC_LOAD_PER_TUNNEL * 1024) * interval_count * 0.9, 4)    # this 0.9 is an experimental value to make traffic load accurate
     
     # If UDP tunnel
     udp_tunnel_port = 0
@@ -130,25 +131,17 @@ async def vpn_session(virtual_hostname, statistics):
         
         # start to create udp tunnel
         logging.info('start to create udp tunnel(send first packet to udp tunnel port..)')
-        udp_tunnel_packet = bytearray(42)
+        udp_tunnel_packet = bytearray(42)   # The first UDP packet, to create UDP tunnel
         udp_tunnel_packet[4 : 4+len(client_udp_uuid)] = bytes(client_udp_uuid.encode('utf-8'))    # Fill uuid, the first 4 bytes is for core id and checksum
         # Fill udp tunnel type, encrypt off: 0x30(ASCII code of 0), encrypt on: 0x31(ASCII code of 1)
         udp_tunnel_packet[4+len(client_udp_uuid)] = 0x31 if IS_UDP_TUNNEL_ENCRYPT else 0x30
-        
         udp_tunnel_packet[4+len(client_udp_uuid)+1] = 0x33   # Dispatch rule, 0x33 means all traffic through UDP tunnel
         udp_tunnel_packet[0] = coreid
         udp_tunnel_packet[1] = (len(udp_tunnel_packet) - 4 + 12) // 8
         udp_tunnel_packet[2] = udp_tunnel_packet[4] ^ udp_tunnel_packet[5]
         udp_tunnel_packet[3] = udp_tunnel_packet[1] ^ udp_tunnel_packet[2]
-        
-        # create asyncio UDP socket
-        loop = asyncio.get_running_loop()
-        # Create corutine socket and send first packet
-        transport, protocol = await loop.create_datagram_endpoint(lambda: VpnUdpTunnelProtocol(logger, loop, udp_tunnel_packet),
-            remote_addr=(VIRTUAL_SITE_IP, udp_tunnel_port))
-        await asyncio.sleep(2)  # Sleep 2s and then start traffic load
-        
-        # For udp tunnel UDP payload part need add a special header
+    
+        # Now generate UDP tunnel payload packet, for payload part need add a special header
         udp_payload_packet_header = [x for x in range(4)]   # Init a list, length is 4 bytes
         udp_payload_packet_header[0] = coreid
         udp_payload_packet_header[1] = (len(pkt) + 12) // 8
@@ -157,61 +150,70 @@ async def vpn_session(virtual_hostname, statistics):
         udp_payload_packet_header.extend(pkt)
         pkt = udp_payload_packet_header
         
-        start_time = time.time()
-        delay_packets_number = 0
-        delay_time_total = 0.0
-        for i in range(total_packets):
+        if not statistics['isThreadStarted']:
+            statistics['isThreadStarted'] = True
+            udp_tunnel_thread = threading.Thread(target=udp_tunnel_socket, args=(VIRTUAL_SITE_IP, udp_tunnel_port, udp_tunnel_packet, pkt, statistics, total_packets, interval_time, interval_count, logger))
+            udp_tunnel_thread.start()
+            # waiting for udp tunnel thread complete, we wait up to DURATION * 2 seconds
+            for i in range(DURATION):
+                if statistics['isThreadComplete']:
+                    break
+                else:
+                    await asyncio.sleep(2)
+        else:
+            # create asyncio UDP socket
+            loop = asyncio.get_running_loop()
+            # Create coroutine socket and send first packet
+            transport, protocol = await loop.create_datagram_endpoint(lambda: VpnUdpTunnelProtocol(logger, loop, udp_tunnel_packet),
+                remote_addr=(VIRTUAL_SITE_IP, udp_tunnel_port))
+            await asyncio.sleep(2)  # Sleep 2s and then start traffic load
             
-            if not i % interval_packets:
-                transport.sendto(bytes(pkt))
-                # By the way, to caculate packet delay(ms)
-                delay_start_time = time.time()
-                # await asyncio.sleep(0.001)  # Todo: resolve UDP tunnel delay caculate
-                delay_end_time = time.time()
-                delay_packets_number += 1
-                delay_time_total += delay_end_time - delay_start_time
-                await asyncio.sleep(interval)
-            else:
-                transport.sendto(bytes(pkt))
+            start_time = time.time()
+            for i in range(total_packets):
+                
+                if not i % interval_count:
+                    transport.sendto(bytes(pkt))
+                    await asyncio.sleep(interval_time)
+                else:
+                    transport.sendto(bytes(pkt))
+                
+            end_time = time.time()
+            throughput= total_packets * PAYLOAD_PACKET_SIZE / (end_time - start_time) / 1024    # KB/s 
             
-        end_time = time.time()
-        throughput= total_packets * PAYLOAD_PACKET_SIZE / (end_time - start_time) / 1024    # KB/s 
-        
-        statistics['delay_packets_number'] = delay_packets_number
-        statistics['delay'] = delay_time_total
-        statistics['troughtput'] += throughput
-        statistics['complete_tunnels'] += 1
+            statistics['throughput'] += throughput
+            statistics['complete_tunnels'] += 1
     
-    # start traffic load
+    # tcp tunnel traffic load
     if  TUNNEL_TYPE == 'TCP':
+        statistics['isThreadComplete'] = True   # TCP tunnel will not start the thread
         start_time = time.time()
         delay_packets_number = 0
         delay_time_total = 0.0
         for i in range(total_packets):
             writer.write(bytes(pkt))
             try:
-                if not i % interval_packets:
-                    await asyncio.sleep(interval)
-                    # By the way, to caculate packet delay(ms)
+                if not i % interval_count:
+                    await asyncio.sleep(interval_time)
+                    # By the way, to calculate packet delay(ms)
                     delay_start_time = time.time()
                     await asyncio.wait_for(writer.drain(), timeout=3)
                     await asyncio.wait_for(reader.read(PAYLOAD_PACKET_SIZE - 28), timeout=3) # ip hdr + icmp hdr or udp hdr = 28
                     delay_end_time = time.time()
                     delay_packets_number += 1
-                    delay_time_total += delay_end_time - delay_start_time    
+                    delay_time_total += delay_end_time - delay_start_time
                 else:
                     await asyncio.wait_for(writer.drain(), timeout=3)
                     await asyncio.wait_for(reader.read(PAYLOAD_PACKET_SIZE - 28), timeout=3) # ip hdr + icmp hdr or udp hdr = 28
             except asyncio.TimeoutError:
-                logging.warning('timeout error catched, virtual ip: %s' %str_clientip)
+                logging.warning('timeout error, virtual ip: %s' %str_clientip)
                 statistics['timeout_err_count'] += 1
         
         end_time = time.time()
         throughput= total_packets * PAYLOAD_PACKET_SIZE / (end_time - start_time) / 1024    # KB/s 
         
-        statistics['delay_packets_number'] = delay_packets_number
-        statistics['delay'] = delay_time_total
-        statistics['troughtput'] += throughput
+        statistics['delay_packets_number'] += delay_packets_number
+        statistics['delay'] += delay_time_total
+        statistics['throughput'] += throughput
         statistics['complete_tunnels'] += 1
     
     # logout session
@@ -239,7 +241,11 @@ if __name__=='__main__':
     statistics['timeout_err_count'] = 0
     statistics['delay'] = 0
     statistics['delay_packets_number'] = 0
-    statistics['troughtput'] = 0
+    statistics['throughput'] = 0
+    
+    # For UDP tunnel delay value statistics, we need to start a single thread
+    statistics['isThreadComplete'] = False
+    statistics['isThreadStarted'] = False
     
     pool = Pool(n)
     for i in range(n):
@@ -257,11 +263,12 @@ if __name__=='__main__':
     print('Waiting for all subprocesses done...')
     pool.close()
     pool.join()
+    
     print('All subprocess done.')
     
     print('=================Statistics===================')
     print('Timeout errors   : %s' %statistics['timeout_err_count'])
     print('Complete tunnels : %s of %s' %(statistics['complete_tunnels'], VIRTUAL_USERS))
-    print('Througtput       : %s KB/s' %round(statistics['troughtput']/statistics['complete_tunnels'], 2))
+    print('Throughput       : %s KB/s' %round(statistics['throughput']/statistics['complete_tunnels'], 2))
     print('Delay            : %s ms' %round(statistics['delay']/statistics['delay_packets_number'] * 1000, 2))
     print('==============================================')

@@ -7,6 +7,7 @@ import struct
 import time
 import asyncio
 from config import PAYLOAD_PACKET_SIZE
+import socket
 
 # total_length: a integer, src_ip and dst_ip shoud be bytes like: b'\xac\x12dd'(172.18.100.100)
 
@@ -174,7 +175,52 @@ def get_apt_control_packet_header():
     ]
     return atp_control_packet_header
 
-
+# A non-coroutine function. Since udp protocol is orderless and connectionless, so it is hard to calculate delay value
+# via coroutine functions, so we start a thread use datagram socket(which is blocked) to get delay value
+def udp_tunnel_socket(ip, port, pkt_init, pkt_payload, statistics, total_packets, interval_time, interval_count, logger):
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    s.settimeout(3)
+    s.sendto(bytes(pkt_init), (ip, port))
+    try:
+        res = s.recv(1024)
+    except BaseException as e:
+        logger.warning('UDP thread tunnel create failed, reason: Timeout')
+        return
+    
+    if res != b'200 OK':
+        logger.warning('UDP thread create VPN tunnel failed, response code is not 200 OK')
+        return
+    
+    delay_packets_number = 0
+    delay_time_total = 0
+    
+    start_time = time.time()
+    for i in range(total_packets):
+        try:
+            if not i % interval_count:
+                delay_start_time = time.time()
+                s.sendto(bytes(pkt_payload), (ip, port))
+                s.recv(1500)
+                delay_end_time = time.time()
+                delay_packets_number += 1
+                delay_time_total += delay_end_time - delay_start_time
+                time.sleep(interval_time)
+            else:
+                s.sendto(bytes(pkt_payload), (ip, port))
+                s.recv(1500)
+        except BaseException as e:
+            logger.info('there is a UDP thread payload timeout')
+        
+    end_time = time.time()
+    
+    throughput= total_packets * PAYLOAD_PACKET_SIZE / (end_time - start_time) / 1024    # KB/s
+    statistics['delay_packets_number'] += delay_packets_number
+    statistics['delay'] += delay_time_total
+    statistics['throughput'] += throughput
+    statistics['complete_tunnels'] += 1
+    statistics['isThreadComplete'] = True
+    
+    
 class VpnUdpTunnelProtocol:
     def __init__(self, logging, loop, udp_tunnel_packet):
         self.logging = logging
