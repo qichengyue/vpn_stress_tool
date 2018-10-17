@@ -250,6 +250,17 @@ def encrypt_udp_payload_packet(pkt, udpkey):
     for i in range(len(pkt)//4):
         data = struct.unpack('!I', pkt[i*4 : i*4+4])[0]
         key = struct.unpack('!I', udpkey[i*4 : i*4+4])[0]
-        encrypted_pkt.extend(data ^ key)
+        encrypted_pkt.extend(struct.pack('!I', data ^ key))
+    
+    residue =  len(pkt)%4
+    if residue > 0:
+        index = len(pkt) - residue
+        for i in range(residue):
+            data = struct.unpack('!B', pkt[index+i])[0]
+            key = struct.unpack('!B', udpkey[index+i])[0]
+            encrypted_pkt.append(struct.pack('!B', data ^ key))
+    
+    return encrypted_pkt
+        
     
         

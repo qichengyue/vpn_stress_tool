@@ -6,7 +6,8 @@ from config import VIRTUAL_SITE_IP, BACKEND_IP, VIRTUAL_USERS, PAYLOAD_PACKET_SI
 import ssl
 import struct
 from utils import generate_icmp_pkt, generate_udp_pkt,\
-    get_apt_control_packet_header, VpnUdpTunnelProtocol, udp_tunnel_socket
+    get_apt_control_packet_header, VpnUdpTunnelProtocol, udp_tunnel_socket,\
+    encrypt_udp_payload_packet
 import socket
 import time
 import requests, urllib3
@@ -145,7 +146,10 @@ async def vpn_session(virtual_hostname, statistics):
         udp_tunnel_packet[2] = udp_tunnel_packet[4] ^ udp_tunnel_packet[5]
         udp_tunnel_packet[3] = udp_tunnel_packet[1] ^ udp_tunnel_packet[2]
     
-        # Now generate UDP tunnel payload packet, for payload part need add a special header
+        # Now generate UDP tunnel payload packet
+        if IS_UDP_TUNNEL_ENCRYPT:
+            pkt = encrypt_udp_payload_packet(pkt, udp_key)
+        # for payload part need add a special header
         udp_payload_packet_header = [x for x in range(4)]   # Init a list, length is 4 bytes
         udp_payload_packet_header[0] = coreid
         udp_payload_packet_header[1] = (len(pkt) + 12) // 8
