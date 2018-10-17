@@ -248,8 +248,8 @@ class VpnUdpTunnelProtocol:
 def encrypt_udp_payload_packet(pkt, udpkey):
     encrypted_pkt = list()
     for i in range(len(pkt)//4):
-        data = struct.unpack('!I', pkt[i*4 : i*4+4])[0]
-        key = struct.unpack('!I', udpkey[i*4 : i*4+4])[0]
+        data = struct.unpack('!I', bytes(pkt[i*4 : i*4+4]))[0]
+        key = struct.unpack('!I', bytes(udpkey[i*4 : i*4+4]))[0]
         encrypted_pkt.extend(struct.pack('!I', data ^ key))
     
     residue =  len(pkt)%4

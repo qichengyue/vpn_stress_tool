@@ -7,19 +7,19 @@ VIRTUAL_SITE_IP = '172.22.134.8'
 BACKEND_IP = '172.18.0.100'
 
 # Concurrent virtual user count
-VIRTUAL_USERS = 1
+VIRTUAL_USERS = 100
 
 # Desired load per tunnel (KB/s)
 TRAFFIC_LOAD_PER_TUNNEL = 200
 
 # how long should the test run(with seconds)
-DURATION = 120
+DURATION = 60
 
 # tunnel type 'TCP', 'UDP', 'DTLS'
 TUNNEL_TYPE = 'UDP'
 
 # encrypt UDP('True' or 'False')
-IS_UDP_TUNNEL_ENCRYPT = False
+IS_UDP_TUNNEL_ENCRYPT = True
 
 # payload type, 'ICMP' or 'UDP'
 PAYLOAD_TYPE = 'UDP'

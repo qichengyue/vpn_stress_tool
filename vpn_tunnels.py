@@ -101,6 +101,7 @@ async def vpn_session(virtual_hostname, statistics):
     pkt = list()
     if PAYLOAD_TYPE == 'ICMP':
         pkt = generate_icmp_pkt(PAYLOAD_PACKET_SIZE, vnc_clientip, socket.inet_aton(BACKEND_IP))
+        print('pkt after encrypt:', pkt)
     elif PAYLOAD_TYPE == 'UDP':
         pkt = generate_udp_pkt(PAYLOAD_PACKET_SIZE, vnc_clientip, socket.inet_aton(BACKEND_IP),
                                PAYLOAD_SRC_PORT, PAYLOAD_DST_PORT + process_number % UDP_SERVER_PROCESS_NUMBER)
