@@ -129,6 +129,7 @@ async def vpn_session(virtual_hostname, statistics):
             logging.warning('Received packet is not for UDP tunnel')
         
         coreid = socket.ntohs(struct.unpack('!H', uuid_packet_response[14:16])[0])
+        udp_key = uuid_packet_response[20:len(uuid_packet_response)]
         udp_tunnel_port = struct.unpack('!I', uuid_packet_response[16:20])[0]
         logging.info('UDP tunnel port is: %s' %udp_tunnel_port)
         
