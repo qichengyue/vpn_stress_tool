@@ -1,7 +1,8 @@
 import asyncio, aiohttp
 from config import VIRTUAL_SITE_IP, BACKEND_IP, VIRTUAL_USERS, PAYLOAD_PACKET_SIZE,\
     PAYLOAD_TYPE, PAYLOAD_SRC_PORT, PAYLOAD_DST_PORT, LOGGING_LEVEL,\
-    TRAFFIC_LOAD_PER_TUNNEL, DURATION, TUNNEL_TYPE, IS_UDP_TUNNEL_ENCRYPT
+    TRAFFIC_LOAD_PER_TUNNEL, DURATION, TUNNEL_TYPE, IS_UDP_TUNNEL_ENCRYPT,\
+    UDP_SERVER_PROCESS_NUMBER
 import ssl
 import struct
 from utils import generate_icmp_pkt, generate_udp_pkt,\
@@ -94,12 +95,14 @@ async def vpn_session(virtual_hostname, statistics):
     
     
     # Generate payload packet and send
+    process_number = int(virtual_hostname[5: virtual_hostname.index(':')]) # virtual_host format is like: 'proc-%s: vuser-%s' %(proc_name, i), extract the process id to dispatch UDP payload to different UDP server port for load balance
+    
     pkt = list()
     if PAYLOAD_TYPE == 'ICMP':
         pkt = generate_icmp_pkt(PAYLOAD_PACKET_SIZE, vnc_clientip, socket.inet_aton(BACKEND_IP))
     elif PAYLOAD_TYPE == 'UDP':
         pkt = generate_udp_pkt(PAYLOAD_PACKET_SIZE, vnc_clientip, socket.inet_aton(BACKEND_IP),
-                               PAYLOAD_SRC_PORT, PAYLOAD_DST_PORT)
+                               PAYLOAD_SRC_PORT, PAYLOAD_DST_PORT + process_number % UDP_SERVER_PROCESS_NUMBER)
     
     await asyncio.sleep(1)
     
