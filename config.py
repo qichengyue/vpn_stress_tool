@@ -15,7 +15,7 @@ TRAFFIC_LOAD_PER_TUNNEL = 200
 # how long should the test run(with seconds)
 DURATION = 60
 
-# tunnel type 'TCP', 'UDP', 'DTLS'
+# tunnel type 'TCP', 'UDP', 'DTLS', 'DTLS1', 'DTLS12', for DTLS tunnel, if you don't know how to choose, please use 'DTLS'
 TUNNEL_TYPE = 'UDP'
 
 # encrypt UDP('True' or 'False')

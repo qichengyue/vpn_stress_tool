@@ -220,7 +220,7 @@ def udp_tunnel_socket(ip, port, pkt_init, pkt_payload, statistics, total_packets
     statistics['complete_tunnels'] += 1
     statistics['isThreadComplete'] = True
     
-    
+# For UDP support on asyncio module, we need a Protocol class to handle handle connection and packet
 class VpnUdpTunnelProtocol:
     def __init__(self, logging, loop, udp_tunnel_packet):
         self.logging = logging
