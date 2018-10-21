@@ -126,6 +126,7 @@ async def vpn_session(virtual_hostname, statistics):
         uuid_packet.extend(struct.unpack('36B', client_udp_uuid.encode('utf-8')) )
         writer.write(bytes(uuid_packet))
         await writer.drain()
+        
         uuid_packet_response = await reader.read(2048)
         if uuid_packet_response[9] != 0xff:
             logging.warning('Received packet is not for UDP tunnel')
@@ -191,6 +192,30 @@ async def vpn_session(virtual_hostname, statistics):
             
             statistics['throughput'] += throughput
             statistics['complete_tunnels'] += 1
+    
+    # if DTLS tunnel
+    dtls_tunnel_port = 0
+    coreid = 0
+    if TUNNEL_TYPE[0:4] == 'DTLS':
+        logging.info('start to get DTLS tunnel config...')
+        uuid_packet = get_apt_control_packet_header()
+        uuid_packet[3] = 0x34               # fixed value 34
+        uuid_packet.extend([0x00, 0x04])    # 0x0004 is command code of ATP_SEND_CLIENTID
+        uuid_packet.extend([0x00, 0x00])    # reserved segment
+        client_udp_uuid = str(uuid.uuid1())
+        uuid_packet.extend(struct.unpack('36B', client_udp_uuid.encode('utf-8')) )
+        writer.write(bytes(uuid_packet))
+        await writer.drain()
+        
+        uuid_packet_response = await reader.read(2048)
+        if uuid_packet_response[9] != 0xff:
+            logging.warning('Received packet is not for DTLS tunnel')
+        
+        coreid = socket.ntohs(struct.unpack('!H', uuid_packet_response[14:16])[0])
+        udp_key = uuid_packet_response[20:len(uuid_packet_response)]
+        dtls_tunnel_port = struct.unpack('!I', uuid_packet_response[16:20])[0]
+        logging.info('DTLS tunnel port is: %s' %udp_tunnel_port)
+        
     
     # tcp tunnel traffic load
     if  TUNNEL_TYPE == 'TCP':
