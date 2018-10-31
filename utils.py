@@ -9,7 +9,7 @@ import asyncio
 from config import PAYLOAD_PACKET_SIZE
 import socket
 
-# total_length: a integer, src_ip and dst_ip shoud be bytes like: b'\xac\x12dd'(172.18.100.100)
+# total_length: a integer, src_ip and dst_ip should be bytes like: b'\xac\x12dd'(172.18.100.100)
 
 
 def generate_icmp_pkt(total_length, src_ip, dst_ip):
@@ -166,6 +166,7 @@ def checksum_calculator(data):
     checksum = 0xffff - checksum
     return checksum
 
+
 # For create UDP tunnel
 def get_apt_control_packet_header(): 
     atp_control_packet_header = [
@@ -174,6 +175,7 @@ def get_apt_control_packet_header():
         0x00, 0xff, 0x00, 0x00,
     ]
     return atp_control_packet_header
+
 
 # A non-coroutine function. Since udp protocol is orderless and connectionless, so it is hard to calculate delay value
 # via coroutine functions, so we start a thread use datagram socket(which is blocked) to get delay value
@@ -213,13 +215,14 @@ def udp_tunnel_socket(ip, port, pkt_init, pkt_payload, statistics, total_packets
         
     end_time = time.time()
     
-    throughput= total_packets * PAYLOAD_PACKET_SIZE / (end_time - start_time) / 1024    # KB/s
+    throughput = total_packets * PAYLOAD_PACKET_SIZE / (end_time - start_time) / 1024    # KB/s
     statistics['delay_packets_number'] += delay_packets_number
     statistics['delay'] += delay_time_total
     statistics['throughput'] += throughput
     statistics['complete_tunnels'] += 1
     statistics['isThreadComplete'] = True
     
+
 # For UDP support on asyncio module, we need a Protocol class to handle handle connection and packet
 class VpnUdpTunnelProtocol:
     def __init__(self, logging, loop, udp_tunnel_packet):
@@ -245,6 +248,7 @@ class VpnUdpTunnelProtocol:
         self.logging.error('UDP tunnel connection lost, reason: %s' %exc)
         self.on_con_lost.set_result(True)
         
+
 def encrypt_udp_payload_packet(pkt, udpkey):
     encrypted_pkt = list()
     for i in range(len(pkt)//4):
@@ -252,7 +256,7 @@ def encrypt_udp_payload_packet(pkt, udpkey):
         key = struct.unpack('!I', bytes(udpkey[i*4 : i*4+4]))[0]
         encrypted_pkt.extend(struct.pack('!I', data ^ key))
     
-    residue =  len(pkt)%4
+    residue = len(pkt) % 4
     if residue > 0:
         index = len(pkt) - residue
         for i in range(residue):
@@ -261,6 +265,3 @@ def encrypt_udp_payload_packet(pkt, udpkey):
             encrypted_pkt.append(struct.pack('!B', data ^ key))
     
     return encrypted_pkt
-        
-    
-        
